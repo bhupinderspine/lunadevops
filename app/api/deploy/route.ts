@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { Vercel } from '@vercel/sdk'
 import { z } from 'zod'
 
 // Validation schema
@@ -41,14 +40,14 @@ export async function POST(request: NextRequest) {
     // Extract GitHub organization and repository name
     const { org, repo } = extractGitHubInfo(validatedData.repositoryUrl)
     
-    // Initialize Vercel SDK
-    const vercel = new Vercel({
-      bearerToken: process.env.VERCEL_TOKEN,
-    })
-
-    // Create deployment with automatic framework detection
-    const deployment = await vercel.deployments.createDeployment({
-      requestBody: {
+    // Create deployment using direct Vercel API with skipAutoDetectionConfirmation
+    const deploymentResponse = await fetch('https://api.vercel.com/v13/deployments?skipAutoDetectionConfirmation=1', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${process.env.VERCEL_TOKEN}`,
+      },
+      body: JSON.stringify({
         name: validatedData.projectName,
         target: validatedData.target,
         gitSource: {
@@ -60,8 +59,15 @@ export async function POST(request: NextRequest) {
         ...(validatedData.domainName && {
           alias: [validatedData.domainName]
         })
-      }
+      })
     })
+
+    if (!deploymentResponse.ok) {
+      const errorData = await deploymentResponse.json()
+      throw new Error(JSON.stringify(errorData))
+    }
+
+    const deployment = await deploymentResponse.json()
 
     return NextResponse.json({
       success: true,
