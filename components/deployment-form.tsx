@@ -145,28 +145,51 @@ export default function DeploymentForm() {
         setSubmitStatus("success")
         setDeploymentResult(result.deployment)
         
-        // Show success in SweetAlert
-        Swal.fire({
-          icon: 'success',
-          title: 'Deployment Created!',
-          html: `
-            <div style="text-align: left; color: #ffffff;">
-              <p><strong>Deployment ID:</strong> ${result.deployment.id}</p>
-              <p><strong>Status:</strong> ${result.deployment.status}</p>
-              <p><strong>URL:</strong> <a href="${result.deployment.url}" target="_blank" style="color: #17a2b8;">${result.deployment.url}</a></p>
-              ${result.deployment.alias && result.deployment.alias.length > 0 ? `<p><strong>Alias:</strong> ${result.deployment.alias.join(', ')}</p>` : ''}
+      // Show success in SweetAlert
+      let successHtml = `
+        <div style="text-align: left; color: #ffffff;">
+          <p><strong>Deployment ID:</strong> ${result.deployment.id}</p>
+          <p><strong>Status:</strong> ${result.deployment.status}</p>
+          <p><strong>URL:</strong> <a href="${result.deployment.url}" target="_blank" style="color: #17a2b8;">${result.deployment.url}</a></p>
+          ${result.deployment.alias && result.deployment.alias.length > 0 ? `<p><strong>Alias:</strong> ${result.deployment.alias.join(', ')}</p>` : ''}
+      `
+
+      // Add domain information if available
+      if (result.domain) {
+        if (result.domain.added) {
+          successHtml += `
+            <div style="margin-top: 15px; padding: 10px; background: rgba(23, 162, 184, 0.1); border-radius: 8px; border-left: 3px solid #17a2b8;">
+              <p><strong>🌐 Domain Added:</strong> ${result.domain.name}</p>
+              <p><strong>Status:</strong> ${result.domain.status}</p>
+              <p style="font-size: 0.9em; color: #17a2b8;">Domain configuration may take a few minutes to propagate.</p>
             </div>
-          `,
-          confirmButtonText: 'Great!',
-          confirmButtonColor: '#17a2b8',
-          background: '#003D58',
-          color: '#ffffff',
-            customClass: {
-              popup: 'swal-popup-custom',
-              title: 'swal-title-custom',
-              htmlContainer: 'swal-content-custom'
-            }
-        })
+          `
+        } else {
+          successHtml += `
+            <div style="margin-top: 15px; padding: 10px; background: rgba(239, 68, 68, 0.1); border-radius: 8px; border-left: 3px solid #ef4444;">
+              <p><strong>⚠️ Domain Error:</strong> ${result.domain.name}</p>
+              <p><strong>Error:</strong> ${result.domain.error}</p>
+            </div>
+          `
+        }
+      }
+
+      successHtml += `</div>`
+
+      Swal.fire({
+        icon: 'success',
+        title: 'Deployment Created!',
+        html: successHtml,
+        confirmButtonText: 'Great!',
+        confirmButtonColor: '#17a2b8',
+        background: '#003D58',
+        color: '#ffffff',
+        customClass: {
+          popup: 'swal-popup-custom',
+          title: 'swal-title-custom',
+          htmlContainer: 'swal-content-custom'
+        }
+      })
         
         // Reset form after success
         setTimeout(() => {

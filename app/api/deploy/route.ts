@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
+import { Vercel } from '@vercel/sdk'
 
 // Validation schema
 const deploymentSchema = z.object({
@@ -69,6 +70,39 @@ export async function POST(request: NextRequest) {
 
     const deployment = await deploymentResponse.json()
 
+    // If domain name is provided, add it to the project
+    let domainResult = null
+    if (validatedData.domainName) {
+      try {
+        const vercel = new Vercel({
+          bearerToken: process.env.VERCEL_TOKEN,
+        })
+
+        const addDomainResponse = await vercel.projects.addProjectDomain({
+          idOrName: validatedData.projectName,
+          requestBody: {
+            name: validatedData.domainName,
+          },
+        })
+
+        domainResult = {
+          name: addDomainResponse.name,
+          status: 'added',
+          added: true
+        }
+
+        console.log(`Domain added: ${addDomainResponse.name}`)
+      } catch (domainError) {
+        console.error('Domain addition error:', domainError)
+        domainResult = {
+          name: validatedData.domainName,
+          status: 'error',
+          added: false,
+          error: domainError instanceof Error ? domainError.message : String(domainError)
+        }
+      }
+    }
+
     return NextResponse.json({
       success: true,
       deployment: {
@@ -81,6 +115,7 @@ export async function POST(request: NextRequest) {
         state: 'BUILDING',
         inspectorUrl: deployment.inspectorUrl || null
       },
+      domain: domainResult,
       message: 'Deployment created successfully!'
     })
 
