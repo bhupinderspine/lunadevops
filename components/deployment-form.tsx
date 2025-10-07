@@ -301,7 +301,7 @@ export default function DeploymentForm() {
         )}
         
         {/* Debug: Show error count */}
-        {process.env.NODE_ENV === 'development' && (
+        {process.env.NODE_ENV === 'development-' && (
           <div className="text-xs text-white/50 mb-2 flex gap-2">
             <span>Debug: {Object.keys(errors).length} errors found</span>
             <button 
@@ -396,7 +396,7 @@ export default function DeploymentForm() {
           </div>
 
           {/* Password */}
-          <div className="space-y-2 group">
+         {/* <div className="space-y-2 group">
             <Label htmlFor="password" className="text-sm font-semibold text-white/90 flex items-center gap-2">
               <Lock className="w-4 h-4 text-[#17a2b8]" />
               Password <span className="text-white/50 text-xs font-normal">(optional)</span>
@@ -433,7 +433,7 @@ export default function DeploymentForm() {
             <p className="text-xs text-white/60 mt-1">
               Note: Vercel SDK uses your Vercel token for authentication. Password is optional.
             </p>
-          </div>
+          </div>*/}
 
           {/* Project Name */}
           <div className="space-y-2 group">
