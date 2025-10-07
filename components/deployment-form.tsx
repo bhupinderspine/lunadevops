@@ -18,6 +18,11 @@ interface FormData {
   projectName: string
   branch: string
   target: 'production' | 'preview'
+  // Environment variables
+  envVars: Array<{
+    key: string
+    value: string
+  }>
 }
 
 interface FormErrors {
@@ -28,6 +33,7 @@ interface FormErrors {
   projectName?: string
   branch?: string
   target?: string
+  envVars?: string
 }
 
 interface DeploymentResult {
@@ -49,7 +55,9 @@ export default function DeploymentForm() {
     domainName: "",
     projectName: "",
     branch: "main",
-    target: "production"
+    target: "production",
+    // Environment variables
+    envVars: []
   })
 
   const [errors, setErrors] = useState<FormErrors>({})
@@ -57,6 +65,33 @@ export default function DeploymentForm() {
   const [submitStatus, setSubmitStatus] = useState<"idle" | "success" | "error">("idle")
   const [statusMessage, setStatusMessage] = useState("")
   const [deploymentResult, setDeploymentResult] = useState<DeploymentResult | null>(null)
+
+  // Environment variable management
+  const addEnvVar = () => {
+    setFormData(prev => ({
+      ...prev,
+      envVars: [...prev.envVars, {
+        key: "",
+        value: ""
+      }]
+    }))
+  }
+
+  const removeEnvVar = (index: number) => {
+    setFormData(prev => ({
+      ...prev,
+      envVars: prev.envVars.filter((_, i) => i !== index)
+    }))
+  }
+
+  const updateEnvVar = (index: number, field: keyof FormData['envVars'][0], value: any) => {
+    setFormData(prev => ({
+      ...prev,
+      envVars: prev.envVars.map((envVar, i) => 
+        i === index ? { ...envVar, [field]: value } : envVar
+      )
+    }))
+  }
 
   const validateForm = (): boolean => {
     const newErrors: FormErrors = {}
@@ -97,6 +132,14 @@ export default function DeploymentForm() {
     // Domain validation (optional)
     if (formData.domainName && !/^[a-zA-Z0-9][a-zA-Z0-9-]*[a-zA-Z0-9]*$/.test(formData.domainName)) {
       newErrors.domainName = "Invalid domain format (e.g., mydomain.com)"
+    }
+
+    // Environment variables validation
+    const invalidEnvVars = formData.envVars.filter(envVar => 
+      !envVar.key.trim() || !envVar.value.trim()
+    )
+    if (invalidEnvVars.length > 0) {
+      newErrors.envVars = "All environment variables must have both key and value"
     }
 
     console.log('Validation errors:', newErrors) // Debug log
@@ -174,6 +217,26 @@ export default function DeploymentForm() {
         }
       }
 
+      // Add environment variables information if available
+      if (result.envVars) {
+        if (result.envVars.added) {
+          successHtml += `
+            <div style="margin-top: 15px; padding: 10px; background: rgba(34, 197, 94, 0.1); border-radius: 8px; border-left: 3px solid #22c55e;">
+              <p><strong>🔧 Environment Variables Added:</strong> ${result.envVars.count} variables</p>
+              <p><strong>Variables:</strong> ${result.envVars.variables.join(', ')}</p>
+              <p style="font-size: 0.9em; color: #22c55e;">Environment variables are now available in your deployment.</p>
+            </div>
+          `
+        } else {
+          successHtml += `
+            <div style="margin-top: 15px; padding: 10px; background: rgba(239, 68, 68, 0.1); border-radius: 8px; border-left: 3px solid #ef4444;">
+              <p><strong>⚠️ Environment Variables Error:</strong></p>
+              <p><strong>Error:</strong> ${result.envVars.error}</p>
+            </div>
+          `
+        }
+      }
+
       successHtml += `</div>`
 
       Swal.fire({
@@ -200,7 +263,8 @@ export default function DeploymentForm() {
             domainName: "",
             projectName: "",
             branch: "main",
-            target: "production"
+            target: "production",
+            envVars: []
           })
           setSubmitStatus("idle")
           setStatusMessage("")
@@ -282,7 +346,7 @@ export default function DeploymentForm() {
     <Card className="w-full max-w-md bg-[#003D58]/40 backdrop-blur-2xl border-2 border-[#17a2b8]/40 shadow-2xl rounded-2xl overflow-hidden hover:border-[#17a2b8]/60 hover:shadow-[#17a2b8]/20 transition-all duration-500">
       <CardHeader className="text-center pb-6 pt-8">
         <CardTitle className="text-3xl font-bold font-heading text-white mb-2 tracking-tight">
-          Luna Intelligence
+          Vertex
         </CardTitle>
         <CardDescription className="text-[#17a2b8] text-base font-medium">Repository Deployment</CardDescription>
       </CardHeader>
@@ -300,25 +364,6 @@ export default function DeploymentForm() {
           </Alert>
         )}
         
-        {/* Debug: Show error count */}
-        {process.env.NODE_ENV === 'development-' && (
-          <div className="text-xs text-white/50 mb-2 flex gap-2">
-            <span>Debug: {Object.keys(errors).length} errors found</span>
-            <button 
-              type="button"
-              onClick={() => {
-                setErrors({
-                  repositoryUrl: "Test error 1",
-                  userName: "Test error 2",
-                  projectName: "Test error 3"
-                })
-              }}
-              className="text-[#17a2b8] hover:text-[#17a2b8]/80 underline"
-            >
-              Test Errors
-            </button>
-          </div>
-        )}
 
         <form onSubmit={handleSubmit} className="space-y-5">
           {/* Repository URL */}
@@ -542,6 +587,77 @@ export default function DeploymentForm() {
             {errors.domainName && (
               <p className="text-sm text-[#ef4444] font-medium">
                 {errors.domainName}
+              </p>
+            )}
+          </div>
+
+          {/* Environment Variables */}
+          <div className="space-y-4 group">
+            <div className="flex items-center justify-between">
+              <Label className="text-sm font-semibold text-white/90 flex items-center gap-2">
+                <Code className="w-4 h-4 text-[#17a2b8]" />
+                Environment Variables <span className="text-white/50 text-xs font-normal">(optional)</span>
+              </Label>
+              <Button
+                type="button"
+                onClick={addEnvVar}
+                className="px-3 py-1 text-xs bg-[#17a2b8]/20 hover:bg-[#17a2b8]/30 text-[#17a2b8] border border-[#17a2b8]/30 rounded-lg transition-all duration-200"
+              >
+                + Add Variable
+              </Button>
+            </div>
+            
+            {formData.envVars.length > 0 && (
+              <div className="space-y-3">
+                {formData.envVars.map((envVar, index) => (
+                  <div key={index} className="grid grid-cols-12 gap-2 items-start">
+                    {/* Key */}
+                    <div className="col-span-4">
+                      <Input
+                        placeholder="KEY"
+                        value={envVar.key}
+                        onChange={(e) => updateEnvVar(index, 'key', e.target.value)}
+                        className="border-2 border-[#17a2b8]/30 focus:border-[#17a2b8] bg-white/5 text-white placeholder:text-white/40 rounded-lg h-9 text-sm"
+                        disabled={isSubmitting}
+                      />
+                    </div>
+                    
+                    {/* Value */}
+                    <div className="col-span-7">
+                      <Input
+                        placeholder="value"
+                        value={envVar.value}
+                        onChange={(e) => updateEnvVar(index, 'value', e.target.value)}
+                        className="border-2 border-[#17a2b8]/30 focus:border-[#17a2b8] bg-white/5 text-white placeholder:text-white/40 rounded-lg h-9 text-sm"
+                        disabled={isSubmitting}
+                      />
+                    </div>
+                    
+                    {/* Remove button */}
+                    <div className="col-span-1">
+                      <Button
+                        type="button"
+                        onClick={() => removeEnvVar(index)}
+                        className="w-full h-9 p-0 bg-red-500/20 hover:bg-red-500/30 text-red-400 border border-red-500/30 rounded-lg transition-all duration-200"
+                        disabled={isSubmitting}
+                      >
+                        ×
+                      </Button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+            
+            {errors.envVars && (
+              <p className="text-sm text-[#ef4444] font-medium">
+                {errors.envVars}
+              </p>
+            )}
+            
+            {formData.envVars.length === 0 && (
+              <p className="text-sm text-white/50 italic">
+                No environment variables added. Click "Add Variable" to add them.
               </p>
             )}
           </div>

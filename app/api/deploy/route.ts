@@ -13,7 +13,11 @@ const deploymentSchema = z.object({
   domainName: z.string().optional(),
   projectName: z.string().min(1, 'Project name is required'),
   branch: z.string().min(1, 'Branch is required').default('main'),
-  target: z.enum(['production', 'preview']).default('production')
+  target: z.enum(['production', 'preview']).default('production'),
+  envVars: z.array(z.object({
+    key: z.string().min(1, 'Environment variable key is required'),
+    value: z.string().min(1, 'Environment variable value is required')
+  })).optional().default([])
 })
 
 // Helper function to extract GitHub info from URL
@@ -103,6 +107,42 @@ export async function POST(request: NextRequest) {
       }
     }
 
+    // Add environment variables if provided
+    let envVarsResult = null
+    if (validatedData.envVars && validatedData.envVars.length > 0) {
+      try {
+        const vercel = new Vercel({
+          bearerToken: process.env.VERCEL_TOKEN,
+        })
+
+        const addEnvVarsResponse = await vercel.projects.createProjectEnv({
+          idOrName: validatedData.projectName,
+          upsert: 'true',
+          requestBody: validatedData.envVars.map(envVar => ({
+            key: envVar.key,
+            value: envVar.value,
+            target: ['production'],
+            type: 'plain',
+          }))
+        })
+
+        envVarsResult = {
+          added: true,
+          count: validatedData.envVars.length,
+          variables: validatedData.envVars.map(envVar => envVar.key)
+        }
+
+        console.log(`Environment variables added: ${validatedData.envVars.length} variables`)
+      } catch (envVarsError) {
+        console.error('Environment variables addition error:', envVarsError)
+        envVarsResult = {
+          added: false,
+          count: 0,
+          error: envVarsError instanceof Error ? envVarsError.message : String(envVarsError)
+        }
+      }
+    }
+
     return NextResponse.json({
       success: true,
       deployment: {
@@ -116,6 +156,7 @@ export async function POST(request: NextRequest) {
         inspectorUrl: deployment.inspectorUrl || null
       },
       domain: domainResult,
+      envVars: envVarsResult,
       message: 'Deployment created successfully!'
     })
 
