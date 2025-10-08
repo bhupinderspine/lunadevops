@@ -183,6 +183,14 @@ export default function DeploymentForm() {
       })
 
       const result = await response.json()
+      
+      // Log complete API response
+      console.log('🚀 DEPLOYMENT API RESPONSE:')
+      console.log('Status:', response.status)
+      console.log('Status Text:', response.statusText)
+      console.log('Headers:', Object.fromEntries(response.headers.entries()))
+      console.log('Response Body:', JSON.stringify(result, null, 2))
+      console.log('=====================================')
 
       if (result.success) {
         setSubmitStatus("success")
@@ -278,7 +286,7 @@ export default function DeploymentForm() {
             fieldErrors[detail.field as keyof FormErrors] = detail.message
           })
           setErrors(fieldErrors)
-          setStatusMessage("Please fix the validation errors above.")
+          setStatusMessage("")
         } else {
           // Show API error in SweetAlert - prioritize error over message
           const errorMessage = result.error || result.message || "Deployment failed. Please check your credentials and try again."
@@ -396,11 +404,6 @@ export default function DeploymentForm() {
               } text-white placeholder:text-white/40 backdrop-blur-sm hover:shadow-lg hover:shadow-[#17a2b8]/10 focus:shadow-xl focus:shadow-[#17a2b8]/20`}
               disabled={isSubmitting}
             />
-            {errors.repositoryUrl && (
-              <p className="text-sm text-[#ef4444] font-medium">
-                {errors.repositoryUrl}
-              </p>
-            )}
           </div>
 
           {/* Username */}
@@ -433,11 +436,6 @@ export default function DeploymentForm() {
               } text-white placeholder:text-white/40 backdrop-blur-sm hover:shadow-lg hover:shadow-[#17a2b8]/10 focus:shadow-xl focus:shadow-[#17a2b8]/20`}
               disabled={isSubmitting}
             />
-            {errors.userName && (
-              <p className="text-sm text-[#ef4444] font-medium">
-                {errors.userName}
-              </p>
-            )}
           </div>
 
           {/* Password */}
@@ -470,11 +468,6 @@ export default function DeploymentForm() {
               } text-white placeholder:text-white/40 backdrop-blur-sm hover:shadow-lg hover:shadow-[#17a2b8]/10 focus:shadow-xl focus:shadow-[#17a2b8]/20`}
               disabled={isSubmitting}
             />
-            {errors.password && (
-              <p className="text-sm text-[#ef4444] font-medium">
-                {errors.password}
-              </p>
-            )}
             <p className="text-xs text-white/60 mt-1">
               Note: Vercel SDK uses your Vercel token for authentication. Password is optional.
             </p>
@@ -510,11 +503,6 @@ export default function DeploymentForm() {
               } text-white placeholder:text-white/40 backdrop-blur-sm hover:shadow-lg hover:shadow-[#17a2b8]/10 focus:shadow-xl focus:shadow-[#17a2b8]/20`}
               disabled={isSubmitting}
             />
-            {errors.projectName && (
-              <p className="text-sm text-[#ef4444] font-medium">
-                {errors.projectName}
-              </p>
-            )}
           </div>
 
           {/* Branch */}
@@ -547,11 +535,6 @@ export default function DeploymentForm() {
               } text-white placeholder:text-white/40 backdrop-blur-sm hover:shadow-lg hover:shadow-[#17a2b8]/10 focus:shadow-xl focus:shadow-[#17a2b8]/20`}
               disabled={isSubmitting}
             />
-            {errors.branch && (
-              <p className="text-sm text-[#ef4444] font-medium">
-                {errors.branch}
-              </p>
-            )}
           </div>
 
           {/* Domain Name */}
@@ -584,11 +567,6 @@ export default function DeploymentForm() {
               } text-white placeholder:text-white/40 backdrop-blur-sm hover:shadow-lg hover:shadow-[#17a2b8]/10 focus:shadow-xl focus:shadow-[#17a2b8]/20`}
               disabled={isSubmitting}
             />
-            {errors.domainName && (
-              <p className="text-sm text-[#ef4444] font-medium">
-                {errors.domainName}
-              </p>
-            )}
           </div>
 
           {/* Environment Variables */}
@@ -649,11 +627,6 @@ export default function DeploymentForm() {
               </div>
             )}
             
-            {errors.envVars && (
-              <p className="text-sm text-[#ef4444] font-medium">
-                {errors.envVars}
-              </p>
-            )}
             
             {formData.envVars.length === 0 && (
               <p className="text-sm text-white/50 italic">
@@ -715,34 +688,6 @@ export default function DeploymentForm() {
             </div>
           )}
 
-          {/* Status Message */}
-          {statusMessage && (
-            <Alert
-              className={`border-2 rounded-xl backdrop-blur-sm p-3 ${
-                submitStatus === "success"
-                  ? "border-[#10b981]/30 bg-[#10b981]/10 text-[#10b981]"
-                  : "border-[#ef4444]/30 bg-[#ef4444]/10 text-[#ef4444]"
-              }`}
-            >
-              <div className="flex items-start gap-2">
-                {submitStatus === "success" ? (
-                  <CheckCircle className="w-4 h-4 flex-shrink-0 mt-0.5" />
-                ) : (
-                  <AlertCircle className="w-4 h-4 flex-shrink-0 mt-0.5" />
-                )}
-                <div className="flex-1 min-w-0">
-                  <AlertDescription className="font-semibold text-sm">
-                    {statusMessage}
-                  </AlertDescription>
-                  {submitStatus === "error" && statusMessage.includes("Vercel token") && (
-                    <div className="mt-2 text-xs text-[#ef4444]/80">
-                      💡 Make sure you have set VERCEL_TOKEN in your .env.local file
-                    </div>
-                  )}
-                </div>
-              </div>
-            </Alert>
-          )}
 
           {/* Deployment Result */}
           {deploymentResult && (
@@ -768,10 +713,16 @@ export default function DeploymentForm() {
                   <div className="flex justify-between">
                     <span className="text-white/70">URL:</span>
                     <a 
-                      href={deploymentResult.url} 
+                      href={deploymentResult.url.startsWith('http') ? deploymentResult.url : `https://${deploymentResult.url}`} 
                       target="_blank" 
                       rel="noopener noreferrer"
                       className="text-[#17a2b8] hover:text-[#17a2b8]/80 underline truncate max-w-[200px]"
+                      onClick={() => {
+                        console.log('🔗 URL Click Debug:')
+                        console.log('Original URL:', deploymentResult.url)
+                        console.log('Starts with http:', deploymentResult.url.startsWith('http'))
+                        console.log('Final href:', deploymentResult.url.startsWith('http') ? deploymentResult.url : `https://${deploymentResult.url}`)
+                      }}
                     >
                       {deploymentResult.url}
                     </a>
@@ -787,7 +738,7 @@ export default function DeploymentForm() {
                   <div className="flex justify-between">
                     <span className="text-white/70">Inspector:</span>
                     <a 
-                      href={deploymentResult.inspectorUrl} 
+                      href={deploymentResult.inspectorUrl?.startsWith('http') ? deploymentResult.inspectorUrl : `https://${deploymentResult.inspectorUrl}`} 
                       target="_blank" 
                       rel="noopener noreferrer"
                       className="text-[#17a2b8] hover:text-[#17a2b8]/80 underline text-xs"

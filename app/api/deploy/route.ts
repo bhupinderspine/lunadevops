@@ -39,6 +39,11 @@ export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
     
+    // Log incoming request
+    console.log('📥 DEPLOYMENT REQUEST RECEIVED:')
+    console.log('Request Body:', JSON.stringify(body, null, 2))
+    console.log('=====================================')
+    
     // Validate input
     const validatedData = deploymentSchema.parse(body)
     
@@ -143,22 +148,35 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    return NextResponse.json({
+    const response = {
       success: true,
       deployment: {
         id: deployment.id,
         status: deployment.status,
-        url: deployment.url,
+        url: deployment.url ? (deployment.url.startsWith('http') ? deployment.url : `https://${deployment.url}`) : null,
         alias: deployment.alias,
         createdAt: deployment.createdAt,
         readyAt: deployment.ready,
         state: 'BUILDING',
-        inspectorUrl: deployment.inspectorUrl || null
+        inspectorUrl: deployment.inspectorUrl ? (deployment.inspectorUrl.startsWith('http') ? deployment.inspectorUrl : `https://${deployment.inspectorUrl}`) : null
       },
       domain: domainResult,
       envVars: envVarsResult,
       message: 'Deployment created successfully!'
-    })
+    }
+
+    // Log complete API response
+    console.log('🎯 VERCEL DEPLOYMENT SUCCESS:')
+    console.log('Deployment ID:', deployment.id)
+    console.log('Status:', deployment.status)
+    console.log('URL:', deployment.url)
+    console.log('Aliases:', deployment.alias)
+    console.log('Domain Result:', domainResult)
+    console.log('Environment Variables:', envVarsResult)
+    console.log('Full Response:', JSON.stringify(response, null, 2))
+    console.log('=====================================')
+
+    return NextResponse.json(response)
 
   } catch (error) {
     console.error('Deployment error:', error)
@@ -226,11 +244,19 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    return NextResponse.json({
+    const errorResponse = {
       success: false,
       error: error instanceof Error ? error.message : 'Unknown error occurred',
       message: 'Deployment failed. Check your Vercel token and repository permissions.'
-    }, { status: 500 })
+    }
+
+    // Log error response
+    console.log('❌ VERCEL DEPLOYMENT ERROR:')
+    console.log('Error:', error instanceof Error ? error.message : 'Unknown error occurred')
+    console.log('Full Error Response:', JSON.stringify(errorResponse, null, 2))
+    console.log('=====================================')
+
+    return NextResponse.json(errorResponse, { status: 500 })
   }
 }
 
