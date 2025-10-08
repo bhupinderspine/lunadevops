@@ -346,7 +346,7 @@ export default function DeploymentForm() {
     <Card className="w-full max-w-md bg-[#003D58]/40 backdrop-blur-2xl border-2 border-[#17a2b8]/40 shadow-2xl rounded-2xl overflow-hidden hover:border-[#17a2b8]/60 hover:shadow-[#17a2b8]/20 transition-all duration-500">
       <CardHeader className="text-center pb-6 pt-8">
         <CardTitle className="text-3xl font-bold font-heading text-white mb-2 tracking-tight">
-          Vertex
+          Vortex
         </CardTitle>
         <CardDescription className="text-[#17a2b8] text-base font-medium">Repository Deployment</CardDescription>
       </CardHeader>
@@ -365,7 +365,7 @@ export default function DeploymentForm() {
         )}
         
 
-        <form onSubmit={handleSubmit} className="space-y-5">
+        <form onSubmit={handleSubmit} className={`space-y-5 transition-all duration-500 ${isSubmitting ? 'opacity-90 scale-[0.99]' : 'opacity-100 scale-100'}`}>
           {/* Repository URL */}
           <div className="space-y-2 group">
             <Label htmlFor="repositoryUrl" className="text-sm font-semibold text-white/90 flex items-center gap-2">
@@ -666,20 +666,54 @@ export default function DeploymentForm() {
           <Button
             type="submit"
             disabled={!isFormValid || isSubmitting}
-            className="w-full bg-gradient-to-r from-[#17a2b8] to-[#17a2b8]/80 hover:from-[#17a2b8] hover:to-[#17a2b8] text-white font-bold py-3 text-base rounded-xl transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed shadow-lg hover:shadow-[#17a2b8]/60 hover:shadow-2xl transform hover:scale-[1.02] active:scale-[0.98] mt-6 relative overflow-hidden group"
+            className="w-full bg-gradient-to-r from-[#17a2b8] to-[#17a2b8]/80 hover:from-[#17a2b8] hover:to-[#17a2b8] text-white font-bold py-4 text-base rounded-xl transition-all duration-500 disabled:opacity-50 disabled:cursor-not-allowed shadow-lg hover:shadow-[#17a2b8]/60 hover:shadow-2xl transform hover:scale-[1.02] active:scale-[0.98] mt-6 relative overflow-hidden group"
           >
             <span className="relative z-10 flex items-center justify-center">
               {isSubmitting ? (
                 <>
-                  <Loader2 className="w-5 h-5 mr-2 animate-spin" />
-                  Submitting...
+                  {/* Enhanced loading animation */}
+                  <div className="flex items-center space-x-3">
+                    <div className="relative">
+                      <Loader2 className="w-6 h-6 animate-spin text-white" />
+                      <div className="absolute inset-0 rounded-full border-2 border-white/30 animate-ping"></div>
+                    </div>
+                    <div className="flex flex-col items-center">
+                      <span className="text-white font-semibold">Deploying...</span>
+                      <div className="flex space-x-1 mt-1">
+                        <div className="w-1 h-1 bg-white/60 rounded-full animate-bounce" style={{animationDelay: '0ms'}}></div>
+                        <div className="w-1 h-1 bg-white/60 rounded-full animate-bounce" style={{animationDelay: '150ms'}}></div>
+                        <div className="w-1 h-1 bg-white/60 rounded-full animate-bounce" style={{animationDelay: '300ms'}}></div>
+                      </div>
+                    </div>
+                  </div>
                 </>
               ) : (
-                "Submit"
+                <div className="flex items-center space-x-2">
+                  <span>Deploy to Vercel</span>
+                  <div className="w-2 h-2 bg-white/80 rounded-full animate-pulse"></div>
+                </div>
               )}
             </span>
+            {/* Enhanced shimmer effect */}
             <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent translate-x-[-100%] group-hover:translate-x-[100%] transition-transform duration-700"></div>
+            
+            {/* Animated background gradient */}
+            <div className="absolute inset-0 bg-gradient-to-r from-[#17a2b8] via-[#20c997] to-[#17a2b8] opacity-0 group-hover:opacity-100 transition-opacity duration-500"></div>
+            
+            {/* Ripple effect on submit */}
+            {isSubmitting && (
+              <div className="absolute inset-0 bg-white/10 animate-ping rounded-xl"></div>
+            )}
           </Button>
+
+          {/* Progress bar during submission */}
+          {isSubmitting && (
+            <div className="w-full bg-white/10 rounded-full h-2 mt-4 overflow-hidden">
+              <div className="h-full bg-gradient-to-r from-[#17a2b8] to-[#20c997] rounded-full animate-pulse relative">
+                <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/30 to-transparent animate-pulse"></div>
+              </div>
+            </div>
+          )}
 
           {/* Status Message */}
           {statusMessage && (
