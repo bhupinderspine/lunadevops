@@ -2,6 +2,7 @@
 
 import type React from "react"
 import { useState } from "react"
+import Image from "next/image"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -525,9 +526,16 @@ export default function DeploymentForm() {
   return (
     <Card className="w-full max-w-md bg-[#003D58]/40 backdrop-blur-2xl border-2 border-[#17a2b8]/40 shadow-2xl rounded-2xl overflow-hidden hover:border-[#17a2b8]/60 hover:shadow-[#17a2b8]/20 transition-all duration-500">
       <CardHeader className="text-center pb-6 pt-8">
-        <CardTitle className="text-3xl font-bold font-heading text-white mb-2 tracking-tight">
-          Vortex
-        </CardTitle>
+        <div className="flex justify-center mb-4">
+          <Image
+            src="/vortex-logo.png"
+            alt="Vortex Logo"
+            width={120}
+            height={60}
+            className="h-12 w-auto sm:h-16 md:h-20 object-contain"
+            priority
+          />
+        </div>
         <CardDescription className="text-[#17a2b8] text-base font-medium">Repository Deployment</CardDescription>
       </CardHeader>
 
