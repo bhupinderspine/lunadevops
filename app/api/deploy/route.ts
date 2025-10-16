@@ -4,9 +4,14 @@ import { Vercel } from '@vercel/sdk'
 
 // Validation schema
 const deploymentSchema = z.object({
-  repositoryUrl: z.string().url('Invalid repository URL').refine(
-    (url) => url.includes('github.com'),
-    'Only GitHub repositories are supported'
+  repositoryUrl: z.string().refine(
+    (url) => {
+      // Check if it's a valid GitHub URL (HTTPS or SSH)
+      const httpsPattern = /^https:\/\/github\.com\/[^\/]+\/[^\/]+(?:\.git)?$/
+      const sshPattern = /^git@github\.com:[^\/]+\/[^\/]+(?:\.git)?$/
+      return httpsPattern.test(url) || sshPattern.test(url)
+    },
+    'Invalid repository URL. Use HTTPS (https://github.com/username/repository) or SSH (git@github.com:username/repository.git) format'
   ),
   userName: z.string().min(1, 'Username is required'),
   password: z.string().optional(),
@@ -20,17 +25,26 @@ const deploymentSchema = z.object({
   })).optional().default([])
 })
 
-// Helper function to extract GitHub info from URL
+// Helper function to extract GitHub info from URL (supports both HTTPS and SSH)
 function extractGitHubInfo(repositoryUrl: string) {
-  const match = repositoryUrl.match(/github\.com\/([^\/]+)\/([^\/]+)(?:\.git)?$/)
+  // Try HTTPS format first: https://github.com/username/repository
+  let match = repositoryUrl.match(/github\.com\/([^\/]+)\/([^\/]+)(?:\.git)?$/)
+  
+  // If not HTTPS, try SSH format: git@github.com:username/repository.git
   if (!match) {
-    throw new Error('Invalid GitHub repository URL')
+    match = repositoryUrl.match(/git@github\.com:([^\/]+)\/([^\/]+)(?:\.git)?$/)
+  }
+  
+  if (!match) {
+    throw new Error('Invalid GitHub repository URL. Use HTTPS (https://github.com/username/repository) or SSH (git@github.com:username/repository.git) format')
   }
   
   const [, org, repo] = match
   return {
     org: org,
-    repo: repo.replace('.git', '')
+    repo: repo.replace('.git', ''),
+    // Convert SSH URL to HTTPS format for Vercel API
+    httpsUrl: `https://github.com/${org}/${repo.replace('.git', '')}`
   }
 }
 
@@ -48,36 +62,82 @@ export async function POST(request: NextRequest) {
     const validatedData = deploymentSchema.parse(body)
     
     // Extract GitHub organization and repository name
-    const { org, repo } = extractGitHubInfo(validatedData.repositoryUrl)
+    const { org, repo, httpsUrl } = extractGitHubInfo(validatedData.repositoryUrl)
+    
+    console.log('Extracted GitHub info:', { org, repo, httpsUrl, branch: validatedData.branch })
     
     // Create deployment using direct Vercel API with skipAutoDetectionConfirmation
+    const deploymentPayload = {
+      name: validatedData.projectName,
+      target: validatedData.target,
+      gitSource: {
+        type: 'github',
+        repo: repo,
+        ref: validatedData.branch,
+        org: org,
+        // Use HTTPS URL for Vercel API compatibility
+        url: httpsUrl
+      },
+      // Add build configuration to help Vercel understand the project
+      buildCommand: 'npm run build',
+      installCommand: 'npm install',
+      // Ensure the project is public or accessible
+      public: true,
+      ...(validatedData.domainName && {
+        alias: [validatedData.domainName]
+      })
+    }
+    
+    console.log('Deployment payload:', JSON.stringify(deploymentPayload, null, 2))
+    
+    // First, try to import the project to ensure Vercel has access to it
+    try {
+      console.log('Attempting to import project first...')
+      const importResponse = await fetch('https://api.vercel.com/v10/projects/import', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${process.env.VERCEL_TOKEN}`,
+        },
+        body: JSON.stringify({
+          name: validatedData.projectName,
+          gitRepository: {
+            type: 'github',
+            repo: `${org}/${repo}`,
+            ref: validatedData.branch,
+            url: httpsUrl
+          }
+        })
+      })
+      
+      if (importResponse.ok) {
+        const importData = await importResponse.json()
+        console.log('Project import successful:', importData)
+      } else {
+        const importError = await importResponse.text()
+        console.warn('Project import failed (this might be normal):', importError)
+      }
+    } catch (importError) {
+      console.warn('Project import error (continuing with deployment):', importError)
+    }
+    
     const deploymentResponse = await fetch('https://api.vercel.com/v13/deployments?skipAutoDetectionConfirmation=1', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${process.env.VERCEL_TOKEN}`,
       },
-      body: JSON.stringify({
-        name: validatedData.projectName,
-        target: validatedData.target,
-        gitSource: {
-          type: 'github',
-          repo: repo,
-          ref: validatedData.branch,
-          org: org,
-        },
-        ...(validatedData.domainName && {
-          alias: [validatedData.domainName]
-        })
-      })
+      body: JSON.stringify(deploymentPayload)
     })
 
     if (!deploymentResponse.ok) {
       const errorData = await deploymentResponse.json()
+      console.error('Vercel deployment failed:', errorData)
       throw new Error(JSON.stringify(errorData))
     }
 
     const deployment = await deploymentResponse.json()
+    console.log('Vercel deployment created:', JSON.stringify(deployment, null, 2))
 
     // If domain name is provided, add it to the project
     let domainResult = null

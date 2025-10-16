@@ -96,13 +96,13 @@ export default function DeploymentForm() {
   const validateForm = (): boolean => {
     const newErrors: FormErrors = {}
 
-    // Repository URL validation
+    // Repository URL validation (supports both HTTPS and SSH)
     if (!formData.repositoryUrl.trim()) {
       newErrors.repositoryUrl = "Repository URL is required"
     } else if (!formData.repositoryUrl.includes("github.com")) {
       newErrors.repositoryUrl = "Please enter a valid GitHub repository URL"
-    } else if (!/^https:\/\/github\.com\/[^\/]+\/[^\/]+(?:\.git)?$/.test(formData.repositoryUrl)) {
-      newErrors.repositoryUrl = "Invalid format. Use: https://github.com/username/repository"
+    } else if (!/^(https:\/\/github\.com\/[^\/]+\/[^\/]+(?:\.git)?|git@github\.com:[^\/]+\/[^\/]+(?:\.git)?)$/.test(formData.repositoryUrl)) {
+      newErrors.repositoryUrl = "Invalid format. Use: https://github.com/username/repository or git@github.com:username/repository.git"
     }
 
     // Username validation
@@ -149,6 +149,20 @@ export default function DeploymentForm() {
 
   const handleInputChange = (field: keyof FormData, value: string) => {
     setFormData((prev) => ({ ...prev, [field]: value }))
+    
+    // Auto-fill username when repository URL is entered
+    if (field === 'repositoryUrl') {
+      if (value.trim()) {
+        const extractedUsername = extractUsernameFromUrl(value)
+        if (extractedUsername) {
+          setFormData((prev) => ({ ...prev, userName: extractedUsername }))
+        }
+      } else {
+        // Clear username when repository URL is empty
+        setFormData((prev) => ({ ...prev, userName: '' }))
+      }
+    }
+    
     // Clear error when user starts typing
     if (field in errors && errors[field as keyof FormErrors]) {
       setErrors((prev) => {
@@ -156,6 +170,23 @@ export default function DeploymentForm() {
         delete newErrors[field as keyof FormErrors]
         return newErrors
       })
+    }
+  }
+
+  // Helper function to extract username from GitHub URL
+  const extractUsernameFromUrl = (url: string): string | null => {
+    try {
+      // Try HTTPS format first: https://github.com/username/repository
+      let match = url.match(/github\.com\/([^\/]+)\/[^\/]+(?:\.git)?$/)
+      
+      // If not HTTPS, try SSH format: git@github.com:username/repository.git
+      if (!match) {
+        match = url.match(/git@github\.com:([^\/]+)\/[^\/]+(?:\.git)?$/)
+      }
+      
+      return match ? match[1] : null
+    } catch (error) {
+      return null
     }
   }
 
@@ -473,8 +504,8 @@ export default function DeploymentForm() {
             </Label>
             <Input
               id="repositoryUrl"
-              type="url"
-              placeholder="Enter GitHub repository URL"
+              type="text"
+              placeholder="https://github.com/username/repo or git@github.com:username/repo.git"
               value={formData.repositoryUrl}
               onChange={(e) => handleInputChange("repositoryUrl", e.target.value)}
               className={`border-2 rounded-xl transition-all duration-300 h-11 text-base ${
@@ -491,6 +522,11 @@ export default function DeploymentForm() {
             <Label htmlFor="userName" className="text-sm font-semibold text-white/90 flex items-center gap-2">
               <User className="w-4 h-4 text-[#17a2b8]" />
               User Name <span className="text-[#ff6b6b]">*</span>
+              {formData.userName && extractUsernameFromUrl(formData.repositoryUrl) === formData.userName && (
+                <span className="text-xs text-[#17a2b8] bg-[#17a2b8]/10 px-2 py-1 rounded-full">
+                  Auto-filled
+                </span>
+              )}
               <svg
                 className="w-3 h-3 ml-auto opacity-30 group-hover:opacity-60 transition-opacity"
                 viewBox="0 0 24 24"
@@ -516,6 +552,11 @@ export default function DeploymentForm() {
               } text-white placeholder:text-white/40 backdrop-blur-sm hover:shadow-lg hover:shadow-[#17a2b8]/10 focus:shadow-xl focus:shadow-[#17a2b8]/20`}
               disabled={isSubmitting}
             />
+            {formData.userName && extractUsernameFromUrl(formData.repositoryUrl) === formData.userName && (
+              <p className="text-xs text-[#17a2b8]/70 mt-1">
+                ✨ Username auto-filled from repository URL. You can edit if needed.
+              </p>
+            )}
           </div>
 
           {/* Password */}
