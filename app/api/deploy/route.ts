@@ -78,9 +78,7 @@ export async function POST(request: NextRequest) {
         // Use HTTPS URL for Vercel API compatibility
         url: httpsUrl
       },
-      // Add build configuration to help Vercel understand the project
-      buildCommand: 'npm run build',
-      installCommand: 'npm install',
+      // Let Vercel auto-detect the project type and build configuration
       // Ensure the project is public or accessible
       public: true,
       ...(validatedData.domainName && {
@@ -161,7 +159,7 @@ export async function POST(request: NextRequest) {
         
         // Wait longer for the domain to be processed by Vercel
         console.log('Waiting for domain to be processed by Vercel...')
-        await new Promise(resolve => setTimeout(resolve, 5000))
+        await new Promise<void>(resolve => setTimeout(resolve, 5000))
         
         // FIRST: Try the correct Vercel API endpoint for domain configuration (v10)
         console.log('Attempting to get verification records from domain config (CORRECT API v10)')
@@ -583,7 +581,7 @@ export async function POST(request: NextRequest) {
           
           try {
             // Wait a bit longer for the domain to be fully processed
-            await new Promise(resolve => setTimeout(resolve, 2000))
+            await new Promise<void>(resolve => setTimeout(resolve, 2000))
             
             // Try to get the domain configuration using the deployment ID
             const deploymentDomainResponse = await fetch(`https://api.vercel.com/v13/deployments/${deployment.id}/domains`, {
@@ -740,21 +738,21 @@ export async function POST(request: NextRequest) {
             deployment.alias = redeployData.alias
             deployment.inspectorUrl = redeployData.inspectorUrl ? (redeployData.inspectorUrl.startsWith('http') ? redeployData.inspectorUrl : `https://${redeployData.inspectorUrl}`) : null
             
-            (envVarsResult as any).redeployment = {
+            envVarsResult.redeployment = {
               triggered: true,
               deploymentId: redeployData.id,
               message: 'Redeployment triggered to apply environment variables'
             }
           } else {
             console.warn('Failed to trigger redeployment:', redeployResponse.status)
-            (envVarsResult as any).redeployment = {
+            envVarsResult.redeployment = {
               triggered: false,
               error: 'Failed to trigger redeployment'
             }
           }
         } catch (redeployError) {
           console.warn('Error triggering redeployment:', redeployError)
-          (envVarsResult as any).redeployment = {
+          envVarsResult.redeployment = {
             triggered: false,
             error: redeployError instanceof Error ? redeployError.message : String(redeployError)
           }

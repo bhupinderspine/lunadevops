@@ -147,6 +147,7 @@ export default function DeploymentForm() {
       }
     }
 
+
     // Branch validation
     if (!formData.branch.trim()) {
       newErrors.branch = "Branch is required"
@@ -530,9 +531,9 @@ export default function DeploymentForm() {
           <Image
             src="/vortex-logo.png"
             alt="Vortex Logo"
-            width={120}
-            height={60}
-            className="h-12 w-auto sm:h-16 md:h-20 object-contain"
+            width={160}
+            height={80}
+            className="h-16 w-auto sm:h-20 md:h-24 lg:h-28 object-contain"
             priority
           />
         </div>
@@ -662,6 +663,7 @@ export default function DeploymentForm() {
               Note: Vercel SDK uses your Vercel token for authentication. Password is optional.
             </p>
           </div>*/}
+
 
           {/* Project Name */}
           <div className="space-y-2 group">
