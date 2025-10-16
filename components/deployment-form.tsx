@@ -287,9 +287,34 @@ export default function DeploymentForm() {
             <div style="margin-top: 15px; padding: 10px; background: rgba(34, 197, 94, 0.1); border-radius: 8px; border-left: 3px solid #22c55e;">
               <p><strong>🔧 Environment Variables Added:</strong> ${result.envVars.count} variables</p>
               <p><strong>Variables:</strong> ${result.envVars.variables.join(', ')}</p>
-              <p style="font-size: 0.9em; color: #22c55e;">Environment variables are now available in your deployment.</p>
-            </div>
           `
+          
+          // Add redeployment information if available
+          if (result.envVars.redeployment) {
+            if (result.envVars.redeployment.triggered) {
+              successHtml += `
+                <div style="margin-top: 8px; padding: 8px; background: rgba(59, 130, 246, 0.1); border-radius: 6px; border-left: 2px solid #3b82f6;">
+                  <p style="font-size: 0.9em; color: #3b82f6;"><strong>🔄 Redeployment Triggered:</strong></p>
+                  <p style="font-size: 0.8em; color: #3b82f6;">New deployment ID: ${result.envVars.redeployment.deploymentId}</p>
+                  <p style="font-size: 0.8em; color: #3b82f6;">Environment variables will be available in the new deployment.</p>
+                </div>
+              `
+            } else {
+              successHtml += `
+                <div style="margin-top: 8px; padding: 8px; background: rgba(245, 158, 11, 0.1); border-radius: 6px; border-left: 2px solid #f59e0b;">
+                  <p style="font-size: 0.9em; color: #f59e0b;"><strong>⚠️ Redeployment Warning:</strong></p>
+                  <p style="font-size: 0.8em; color: #f59e0b;">Environment variables added but redeployment failed.</p>
+                  <p style="font-size: 0.8em; color: #f59e0b;">You may need to manually redeploy to see the changes.</p>
+                </div>
+              `
+            }
+          } else {
+            successHtml += `
+              <p style="font-size: 0.9em; color: #22c55e;">Environment variables are now available in your deployment.</p>
+            `
+          }
+          
+          successHtml += `</div>`
         } else {
           successHtml += `
             <div style="margin-top: 15px; padding: 10px; background: rgba(239, 68, 68, 0.1); border-radius: 8px; border-left: 3px solid #ef4444;">

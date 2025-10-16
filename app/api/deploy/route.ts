@@ -639,10 +639,66 @@ export async function POST(request: NextRequest) {
         envVarsResult = {
           added: true,
           count: validatedData.envVars.length,
-          variables: validatedData.envVars.map(envVar => envVar.key)
+          variables: validatedData.envVars.map(envVar => envVar.key),
+          redeployment: null as any
         }
 
         console.log(`Environment variables added: ${validatedData.envVars.length} variables`)
+        
+        // Trigger a redeployment to apply the new environment variables
+        try {
+          console.log('Triggering redeployment to apply environment variables...')
+          
+          const redeployResponse = await fetch('https://api.vercel.com/v13/deployments?skipAutoDetectionConfirmation=1', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${process.env.VERCEL_TOKEN}`,
+            },
+            body: JSON.stringify({
+              name: validatedData.projectName,
+              target: validatedData.target,
+              gitSource: {
+                type: 'github',
+                repo: repo,
+                ref: validatedData.branch,
+                org: org,
+              },
+              ...(validatedData.domainName && {
+                alias: [validatedData.domainName]
+              })
+            })
+          })
+
+          if (redeployResponse.ok) {
+            const redeployData = await redeployResponse.json()
+            console.log('Redeployment triggered successfully:', redeployData.id)
+            
+            // Update the deployment info with the new deployment
+            deployment.id = redeployData.id
+            deployment.url = redeployData.url ? (redeployData.url.startsWith('http') ? redeployData.url : `https://${redeployData.url}`) : null
+            deployment.alias = redeployData.alias
+            deployment.inspectorUrl = redeployData.inspectorUrl ? (redeployData.inspectorUrl.startsWith('http') ? redeployData.inspectorUrl : `https://${redeployData.inspectorUrl}`) : null
+            
+            (envVarsResult as any).redeployment = {
+              triggered: true,
+              deploymentId: redeployData.id,
+              message: 'Redeployment triggered to apply environment variables'
+            }
+          } else {
+            console.warn('Failed to trigger redeployment:', redeployResponse.status)
+            (envVarsResult as any).redeployment = {
+              triggered: false,
+              error: 'Failed to trigger redeployment'
+            }
+          }
+        } catch (redeployError) {
+          console.warn('Error triggering redeployment:', redeployError)
+          (envVarsResult as any).redeployment = {
+            triggered: false,
+            error: redeployError instanceof Error ? redeployError.message : String(redeployError)
+          }
+        }
       } catch (envVarsError) {
         console.error('Environment variables addition error:', envVarsError)
         envVarsResult = {
