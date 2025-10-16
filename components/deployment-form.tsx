@@ -130,8 +130,8 @@ export default function DeploymentForm() {
     }
 
     // Domain validation (optional)
-    if (formData.domainName && !/^[a-zA-Z0-9][a-zA-Z0-9-]*[a-zA-Z0-9]*$/.test(formData.domainName)) {
-      newErrors.domainName = "Invalid domain format (e.g., mydomain.com)"
+    if (formData.domainName && !/^[a-zA-Z0-9]([a-zA-Z0-9-]*[a-zA-Z0-9])?(\.[a-zA-Z0-9]([a-zA-Z0-9-]*[a-zA-Z0-9])?)*$/.test(formData.domainName)) {
+      newErrors.domainName = "Invalid domain format (e.g., mydomain.com, test1.lunai.ai)"
     }
 
     // Environment variables validation
@@ -213,8 +213,63 @@ export default function DeploymentForm() {
               <p><strong>🌐 Domain Added:</strong> ${result.domain.name}</p>
               <p><strong>Status:</strong> ${result.domain.status}</p>
               <p style="font-size: 0.9em; color: #17a2b8;">Domain configuration may take a few minutes to propagate.</p>
-            </div>
           `
+          
+          // Add verification records if available (these are the required DNS records)
+          if (result.domain.verificationRecords && result.domain.verificationRecords.length > 0) {
+            successHtml += `
+              <div style="margin-top: 10px;">
+                <p style="font-size: 0.9em; color: #f59e0b; margin-bottom: 8px;"><strong>⚠️ Required DNS Records:</strong></p>
+                <p style="font-size: 0.8em; color: #ffffff; margin-bottom: 8px;">Add these DNS records to your domain provider to verify and connect your domain:</p>
+                <div style="background: rgba(0, 0, 0, 0.3); border-radius: 6px; padding: 10px; font-family: monospace; font-size: 0.8em; border: 1px solid #f59e0b;">
+            `
+            
+            result.domain.verificationRecords.forEach((record: any) => {
+              successHtml += `
+                <div style="margin-bottom: 6px; color: #ffffff; display: flex; align-items: center; gap: 8px;">
+                  <span style="color: #17a2b8; font-weight: bold; min-width: 60px;">${record.type}</span> 
+                  <span style="color: #ffffff; min-width: 80px;">${record.name || '@'}</span> 
+                  <span style="color: #22c55e; flex: 1;">${record.value}</span>
+                  <button onclick="navigator.clipboard.writeText('${record.value}')" style="background: #17a2b8; color: white; border: none; padding: 2px 6px; border-radius: 3px; font-size: 0.7em; cursor: pointer;">Copy</button>
+                </div>
+              `
+            })
+            
+            successHtml += `
+                </div>
+                <p style="font-size: 0.7em; color: #f59e0b; margin-top: 6px; font-style: italic;">
+                  ⏱️ DNS propagation may take up to 24 hours. Click "Refresh" in Vercel dashboard to check status.
+                </p>
+              </div>
+            `
+          }
+          
+          // Add existing DNS records if available
+          if (result.domain.dnsRecords && result.domain.dnsRecords.length > 0) {
+            successHtml += `
+              <div style="margin-top: 10px;">
+                <p style="font-size: 0.9em; color: #17a2b8; margin-bottom: 8px;"><strong>Current DNS Records:</strong></p>
+                <div style="background: rgba(0, 0, 0, 0.2); border-radius: 6px; padding: 8px; font-family: monospace; font-size: 0.8em;">
+            `
+            
+            result.domain.dnsRecords.forEach((record: any) => {
+              successHtml += `
+                <div style="margin-bottom: 4px; color: #ffffff;">
+                  <span style="color: #17a2b8;">${record.type}</span> 
+                  <span style="color: #ffffff;">${record.name || '@'}</span> 
+                  <span style="color: #22c55e;">${record.value}</span>
+                  ${record.ttl ? `<span style="color: #f59e0b;">TTL: ${record.ttl}</span>` : ''}
+                </div>
+              `
+            })
+            
+            successHtml += `
+                </div>
+              </div>
+            `
+          }
+          
+          successHtml += `</div>`
         } else {
           successHtml += `
             <div style="margin-top: 15px; padding: 10px; background: rgba(239, 68, 68, 0.1); border-radius: 8px; border-left: 3px solid #ef4444;">

@@ -94,10 +94,513 @@ export async function POST(request: NextRequest) {
           },
         })
 
+        console.log('Domain add response:', JSON.stringify(addDomainResponse, null, 2))
+
+        // Try to get verification records immediately after adding domain
+        let verificationRecords = null
+        
+        // Wait longer for the domain to be processed by Vercel
+        console.log('Waiting for domain to be processed by Vercel...')
+        await new Promise(resolve => setTimeout(resolve, 5000))
+        
+        // FIRST: Try the correct Vercel API endpoint for domain configuration (v10)
+        console.log('Attempting to get verification records from domain config (CORRECT API v10)')
+        
+        try {
+          // Use the correct Vercel API endpoint for domain configuration (v10)
+          const domainConfigResponse = await fetch(`https://api.vercel.com/v10/projects/${validatedData.projectName}/domains`, {
+            method: 'GET',
+            headers: {
+              'Authorization': `Bearer ${process.env.VERCEL_TOKEN}`,
+            },
+          })
+          
+          console.log('Domain config response status:', domainConfigResponse.status)
+          
+          if (domainConfigResponse.ok) {
+            const domainConfigData = await domainConfigResponse.json()
+            console.log('Domain config data (v10):', JSON.stringify(domainConfigData, null, 2))
+            
+            // Handle v10 API response structure: { "domains": [...] }
+            if (domainConfigData.domains && Array.isArray(domainConfigData.domains)) {
+              console.log('Processing domains array from v10 API')
+              
+              // Find the specific domain
+              const targetDomain = domainConfigData.domains.find((domain: any) => 
+                domain.name === validatedData.domainName
+              )
+              
+              if (targetDomain) {
+                console.log('Found target domain:', JSON.stringify(targetDomain, null, 2))
+                console.log('Domain verified status:', targetDomain.verified)
+                console.log('Domain configuration status:', targetDomain.configured || 'not specified')
+                
+                // Extract subdomain from the domain name
+                const domainParts = validatedData.domainName.split('.')
+                const subdomain = domainParts.length > 2 ? domainParts[0] : ''
+                
+                // Check if domain is verified/configured
+                if (targetDomain.verified === false || targetDomain.configured === false) {
+                  console.warn('Domain is not verified/configured yet - verification records may not be available')
+                  console.warn('This is normal for newly added domains. DNS records need to be configured first.')
+                }
+                
+                // Look for verification records in the domain
+                if (targetDomain.verification && Array.isArray(targetDomain.verification)) {
+                  console.log('Processing verification array:', targetDomain.verification)
+                  
+                  // Look for CNAME records in verification array
+                  const cnameRecord = targetDomain.verification.find((record: any) => 
+                    record.type === 'CNAME' && record.value && record.value.includes('vercel-dns')
+                  )
+                  
+                  if (cnameRecord) {
+                    verificationRecords = [
+                      {
+                        type: 'CNAME',
+                        name: subdomain || '@',
+                        value: cnameRecord.value,
+                        required: true,
+                        purpose: 'verification'
+                      }
+                    ]
+                    console.log('Found dynamic CNAME from v10 verification array:', verificationRecords)
+                  } else {
+                    console.warn('No CNAME record found in v10 verification array')
+                    console.warn('Available verification records:', targetDomain.verification.map((r: any) => ({ type: r.type, value: r.value })))
+                    
+                    // If no CNAME found but domain is not verified, this is expected
+                    if (targetDomain.verified === false) {
+                      console.warn('Domain is not verified yet - CNAME records will be available after DNS configuration')
+                    }
+                  }
+                } else {
+                  console.warn('No verification array found in target domain')
+                  if (targetDomain.verified === false) {
+                    console.warn('This is expected for unverified domains - verification records will appear after DNS setup')
+                  }
+                }
+              } else {
+                console.warn('Target domain not found in domains array')
+                console.warn('Available domains:', domainConfigData.domains.map((d: any) => d.name))
+              }
+            } else {
+              console.warn('No domains array found in v10 API response')
+              console.warn('Available keys:', Object.keys(domainConfigData))
+            }
+          } else {
+            const errorText = await domainConfigResponse.text()
+            console.warn('Failed to fetch domain config:', domainConfigResponse.status, errorText)
+          }
+        } catch (domainConfigError) {
+          console.warn('Error fetching domain config:', domainConfigError)
+        }
+        
+        // SECOND: Try to get the domain configuration using Vercel SDK (fallback)
+        if (!verificationRecords) {
+          try {
+            const domainConfig = await vercel.projects.getProjectDomain({
+              idOrName: validatedData.projectName,
+              domain: validatedData.domainName,
+            })
+            
+            console.log('Domain config from SDK:', JSON.stringify(domainConfig, null, 2))
+            
+            // Check if verification records are in the response
+            if (domainConfig.verification && domainConfig.verification.length > 0) {
+              verificationRecords = domainConfig.verification.map((record: any) => ({
+                type: record.type,
+                name: record.name,
+                value: record.value,
+                required: true,
+                purpose: 'verification'
+              }))
+              console.log('Found verification records from SDK:', verificationRecords)
+            }
+          } catch (sdkError) {
+            console.warn('Failed to get domain config from SDK:', sdkError)
+          }
+        }
+
+        // Fetch DNS records for the domain verification
+        let dnsRecords = null
+        try {
+          // Get domain configuration from project domains endpoint
+          const projectDomainsResponse = await fetch(`https://api.vercel.com/v9/projects/${validatedData.projectName}/domains`, {
+            method: 'GET',
+            headers: {
+              'Authorization': `Bearer ${process.env.VERCEL_TOKEN}`,
+            },
+          })
+          
+          if (projectDomainsResponse.ok) {
+            const projectDomains = await projectDomainsResponse.json()
+            console.log('Project domains response:', JSON.stringify(projectDomains, null, 2))
+            
+            // Find the specific domain
+            const domainConfig = projectDomains.domains?.find((domain: any) => domain.name === validatedData.domainName)
+            
+            if (domainConfig) {
+              console.log('Found domain config:', JSON.stringify(domainConfig, null, 2))
+              
+              // Extract verification records from domain configuration
+              if (domainConfig.verification && domainConfig.verification.length > 0) {
+                verificationRecords = domainConfig.verification.map((record: any) => ({
+                  type: record.type,
+                  name: record.name,
+                  value: record.value,
+                  required: true,
+                  purpose: 'verification'
+                }))
+              }
+              
+              console.log(`Verification records for ${validatedData.domainName}:`, verificationRecords?.length || 0, 'records')
+            }
+          } else {
+            console.warn('Failed to fetch project domains:', projectDomainsResponse.status, projectDomainsResponse.statusText)
+          }
+          
+          // Try to get DNS records using the domains API
+          const dnsResponse = await fetch(`https://api.vercel.com/v4/domains/${validatedData.domainName}/records`, {
+            method: 'GET',
+            headers: {
+              'Authorization': `Bearer ${process.env.VERCEL_TOKEN}`,
+            },
+          })
+          
+          console.log('DNS response status:', dnsResponse.status)
+          
+          if (dnsResponse.ok) {
+            const dnsData = await dnsResponse.json()
+            console.log('DNS data:', JSON.stringify(dnsData, null, 2))
+            
+            dnsRecords = dnsData.map((record: any) => ({
+              id: record.id,
+              name: record.name,
+              type: record.type,
+              value: record.value,
+              ttl: record.ttl,
+              priority: record.priority,
+              createdAt: record.createdAt,
+              updatedAt: record.updatedAt
+            }))
+            
+            console.log(`DNS records fetched for ${validatedData.domainName}:`, dnsRecords.length, 'records')
+          } else {
+            const errorText = await dnsResponse.text()
+            console.warn('Failed to fetch DNS records:', dnsResponse.status, dnsResponse.statusText, errorText)
+          }
+        } catch (dnsError) {
+          console.warn('Failed to fetch DNS records:', dnsError)
+          dnsRecords = null
+          verificationRecords = null
+        }
+
+        // Try direct domains API call (like the curl command you suggested)
+        if (!verificationRecords && validatedData.domainName) {
+          console.log('Attempting direct domains API call (v9/domains)')
+          console.log('This will show all domains and their verification records')
+          
+          try {
+            // Try the direct domains API endpoint
+            const domainsResponse = await fetch(`https://api.vercel.com/v9/domains`, {
+              method: 'GET',
+              headers: {
+                'Authorization': `Bearer ${process.env.VERCEL_TOKEN}`,
+              },
+            })
+            
+            console.log('Domains API response status:', domainsResponse.status)
+            
+            if (domainsResponse.ok) {
+              const domainsData = await domainsResponse.json()
+              console.log('All domains data:', JSON.stringify(domainsData, null, 2))
+              
+              // Look for our specific domain in the response
+              if (domainsData.domains && Array.isArray(domainsData.domains)) {
+                const targetDomain = domainsData.domains.find((domain: any) => 
+                  domain.name === validatedData.domainName
+                )
+                
+                if (targetDomain) {
+                  console.log('Found target domain in domains API:', JSON.stringify(targetDomain, null, 2))
+                  
+                  // Extract subdomain from the domain name
+                  const domainParts = validatedData.domainName.split('.')
+                  const subdomain = domainParts.length > 2 ? domainParts[0] : ''
+                  
+                  // Look for verification records
+                  if (targetDomain.verification && Array.isArray(targetDomain.verification)) {
+                    console.log('Processing verification array from domains API:', targetDomain.verification)
+                    
+                    // Look for CNAME records
+                    const cnameRecord = targetDomain.verification.find((record: any) => 
+                      record.type === 'CNAME' && record.value && record.value.includes('vercel-dns')
+                    )
+                    
+                    if (cnameRecord) {
+                      verificationRecords = [
+                        {
+                          type: 'CNAME',
+                          name: subdomain || '@',
+                          value: cnameRecord.value,
+                          required: true,
+                          purpose: 'verification'
+                        }
+                      ]
+                      console.log('Found dynamic CNAME from domains API:', verificationRecords)
+                    } else {
+                      console.warn('No CNAME record found in domains API verification array')
+                      console.warn('Available verification records:', targetDomain.verification.map((r: any) => ({ type: r.type, value: r.value })))
+                    }
+                  } else {
+                    console.warn('No verification array found in domains API response')
+                  }
+                } else {
+                  console.warn('Target domain not found in domains API response')
+                  console.warn('Available domains:', domainsData.domains.map((d: any) => d.name))
+                }
+              } else {
+                console.warn('No domains array found in domains API response')
+                console.warn('Available keys:', Object.keys(domainsData))
+              }
+            } else {
+              const errorText = await domainsResponse.text()
+              console.warn('Failed to fetch domains:', domainsResponse.status, errorText)
+            }
+          } catch (domainsError) {
+            console.warn('Error fetching domains:', domainsError)
+          }
+        }
+
+        // Try alternative approach to get verification records (for invalid configuration domains)
+        if (!verificationRecords && validatedData.domainName) {
+          console.log('Attempting alternative verification record fetch for:', validatedData.domainName)
+          console.log('This might be needed for domains with invalid configuration status')
+          
+          try {
+            // Try to get domain verification records using the domains API
+            const domainVerificationResponse = await fetch(`https://api.vercel.com/v9/domains/${validatedData.domainName}/config`, {
+              method: 'GET',
+              headers: {
+                'Authorization': `Bearer ${process.env.VERCEL_TOKEN}`,
+              },
+            })
+            
+            console.log('Domain verification response status:', domainVerificationResponse.status)
+            
+            if (domainVerificationResponse.ok) {
+              const domainVerificationData = await domainVerificationResponse.json()
+              console.log('Domain verification data:', JSON.stringify(domainVerificationData, null, 2))
+              
+              if (domainVerificationData.verification && domainVerificationData.verification.length > 0) {
+                verificationRecords = domainVerificationData.verification.map((record: any) => ({
+                  type: record.type,
+                  name: record.name,
+                  value: record.value,
+                  required: true,
+                  purpose: 'verification'
+                }))
+                console.log('Found verification records from domain config:', verificationRecords)
+              }
+            } else {
+              const errorText = await domainVerificationResponse.text()
+              console.warn('Failed to fetch domain verification:', domainVerificationResponse.status, errorText)
+            }
+          } catch (verificationError) {
+            console.warn('Error fetching domain verification:', verificationError)
+          }
+        }
+
+        // Try to get verification records from project domain settings (another approach)
+        if (!verificationRecords && validatedData.domainName) {
+          console.log('Attempting to get verification records from project domain settings')
+          
+          try {
+            // Try the project domains endpoint with more specific parameters
+            const projectDomainResponse = await fetch(`https://api.vercel.com/v9/projects/${validatedData.projectName}/domains/${validatedData.domainName}`, {
+              method: 'GET',
+              headers: {
+                'Authorization': `Bearer ${process.env.VERCEL_TOKEN}`,
+              },
+            })
+            
+            console.log('Project domain response status:', projectDomainResponse.status)
+            
+            if (projectDomainResponse.ok) {
+              const projectDomainData = await projectDomainResponse.json()
+              console.log('Project domain data:', JSON.stringify(projectDomainData, null, 2))
+              
+              // Look for verification records in different possible locations
+              if (projectDomainData.verification && projectDomainData.verification.length > 0) {
+                verificationRecords = projectDomainData.verification.map((record: any) => ({
+                  type: record.type,
+                  name: record.name,
+                  value: record.value,
+                  required: true,
+                  purpose: 'verification'
+                }))
+                console.log('Found verification records from project domain:', verificationRecords)
+              } else if (projectDomainData.dns && projectDomainData.dns.length > 0) {
+                // Sometimes verification records are in the dns array
+                const verificationDns = projectDomainData.dns.filter((record: any) => record.type === 'CNAME' && record.name)
+                if (verificationDns.length > 0) {
+                  verificationRecords = verificationDns.map((record: any) => ({
+                    type: record.type,
+                    name: record.name,
+                    value: record.value,
+                    required: true,
+                    purpose: 'verification'
+                  }))
+                  console.log('Found verification records from DNS array:', verificationRecords)
+                }
+              }
+            } else {
+              const errorText = await projectDomainResponse.text()
+              console.warn('Failed to fetch project domain:', projectDomainResponse.status, errorText)
+            }
+          } catch (projectDomainError) {
+            console.warn('Error fetching project domain:', projectDomainError)
+          }
+        }
+
+        // Try to get verification records from the project's domain settings
+        if (!verificationRecords && validatedData.domainName) {
+          console.log('Attempting to get verification records from project domain settings')
+          
+          try {
+            // Try the project domains endpoint with more specific parameters
+            const projectDomainResponse = await fetch(`https://api.vercel.com/v9/projects/${validatedData.projectName}/domains/${validatedData.domainName}`, {
+              method: 'GET',
+              headers: {
+                'Authorization': `Bearer ${process.env.VERCEL_TOKEN}`,
+              },
+            })
+            
+            console.log('Project domain response status:', projectDomainResponse.status)
+            
+            if (projectDomainResponse.ok) {
+              const projectDomainData = await projectDomainResponse.json()
+              console.log('Project domain data:', JSON.stringify(projectDomainData, null, 2))
+              
+              // Look for verification records in different possible locations
+              if (projectDomainData.verification && projectDomainData.verification.length > 0) {
+                verificationRecords = projectDomainData.verification.map((record: any) => ({
+                  type: record.type,
+                  name: record.name,
+                  value: record.value,
+                  required: true,
+                  purpose: 'verification'
+                }))
+                console.log('Found verification records from project domain:', verificationRecords)
+              } else if (projectDomainData.dns && projectDomainData.dns.length > 0) {
+                // Sometimes verification records are in the dns array
+                const verificationDns = projectDomainData.dns.filter((record: any) => record.type === 'CNAME' && record.name)
+                if (verificationDns.length > 0) {
+                  verificationRecords = verificationDns.map((record: any) => ({
+                    type: record.type,
+                    name: record.name,
+                    value: record.value,
+                    required: true,
+                    purpose: 'verification'
+                  }))
+                  console.log('Found verification records from DNS array:', verificationRecords)
+                }
+              }
+            } else {
+              const errorText = await projectDomainResponse.text()
+              console.warn('Failed to fetch project domain:', projectDomainResponse.status, errorText)
+            }
+          } catch (projectDomainError) {
+            console.warn('Error fetching project domain:', projectDomainError)
+          }
+        }
+
+
+        // Try to get verification records from the deployment's domain configuration
+        if (!verificationRecords && validatedData.domainName) {
+          console.log('Attempting to get verification records from deployment domain config')
+          
+          try {
+            // Wait a bit longer for the domain to be fully processed
+            await new Promise(resolve => setTimeout(resolve, 2000))
+            
+            // Try to get the domain configuration using the deployment ID
+            const deploymentDomainResponse = await fetch(`https://api.vercel.com/v13/deployments/${deployment.id}/domains`, {
+              method: 'GET',
+              headers: {
+                'Authorization': `Bearer ${process.env.VERCEL_TOKEN}`,
+              },
+            })
+            
+            console.log('Deployment domain response status:', deploymentDomainResponse.status)
+            
+            if (deploymentDomainResponse.ok) {
+              const deploymentDomainData = await deploymentDomainResponse.json()
+              console.log('Deployment domain data:', JSON.stringify(deploymentDomainData, null, 2))
+              
+              // Look for verification records in the deployment domain data
+              if (deploymentDomainData.verification && deploymentDomainData.verification.length > 0) {
+                verificationRecords = deploymentDomainData.verification.map((record: any) => ({
+                  type: record.type,
+                  name: record.name,
+                  value: record.value,
+                  required: true,
+                  purpose: 'verification'
+                }))
+                console.log('Found verification records from deployment domain:', verificationRecords)
+              }
+            } else {
+              const errorText = await deploymentDomainResponse.text()
+              console.warn('Failed to fetch deployment domain:', deploymentDomainResponse.status, errorText)
+            }
+          } catch (deploymentDomainError) {
+            console.warn('Error fetching deployment domain:', deploymentDomainError)
+          }
+        }
+
+        // Final fallback: If still no verification records, try to get them from deployment response
+        if (!verificationRecords && deployment.alias && deployment.alias.length > 0) {
+          console.log('Attempting to extract verification info from deployment aliases')
+          
+          // Look for the custom domain in aliases
+          const customDomain = deployment.alias.find((alias: string) => alias === validatedData.domainName)
+          
+          if (customDomain) {
+            // Extract subdomain from the domain name
+            const domainParts = validatedData.domainName.split('.')
+            const subdomain = domainParts.length > 2 ? domainParts[0] : ''
+            
+            // Use generic Vercel CNAME (this is the standard one)
+            verificationRecords = [
+              {
+                type: 'CNAME',
+                name: subdomain || '@',
+                value: 'cname.vercel-dns.com',
+                required: true,
+                purpose: 'verification',
+                note: 'Standard Vercel verification record'
+              }
+            ]
+            
+            console.log('Generated standard verification record:', verificationRecords)
+          }
+        }
+
+        // Debug: Log what we found
+        console.log('=== VERIFICATION RECORDS DEBUG ===')
+        console.log('Final verification records:', verificationRecords)
+        console.log('Domain name:', validatedData.domainName)
+        console.log('Project name:', validatedData.projectName)
+        console.log('Deployment ID:', deployment.id)
+        console.log('=====================================')
+
         domainResult = {
           name: addDomainResponse.name,
           status: 'added',
-          added: true
+          added: true,
+          dnsRecords: dnsRecords,
+          verificationRecords: verificationRecords
         }
 
         console.log(`Domain added: ${addDomainResponse.name}`)
@@ -107,7 +610,9 @@ export async function POST(request: NextRequest) {
           name: validatedData.domainName,
           status: 'error',
           added: false,
-          error: domainError instanceof Error ? domainError.message : String(domainError)
+          error: domainError instanceof Error ? domainError.message : String(domainError),
+          dnsRecords: null,
+          verificationRecords: null
         }
       }
     }
@@ -171,7 +676,7 @@ export async function POST(request: NextRequest) {
     console.log('Status:', deployment.status)
     console.log('URL:', deployment.url)
     console.log('Aliases:', deployment.alias)
-    console.log('Domain Result:', domainResult)
+    console.log('Domain Result:', JSON.stringify(domainResult, null, 2))
     console.log('Environment Variables:', envVarsResult)
     console.log('Full Response:', JSON.stringify(response, null, 2))
     console.log('=====================================')
