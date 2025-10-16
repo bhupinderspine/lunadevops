@@ -117,11 +117,33 @@ export default function DeploymentForm() {
       newErrors.password = "Password must be at least 6 characters"
     }
 
-    // Project name validation
+    // Project name validation (Vercel requirements)
     if (!formData.projectName.trim()) {
       newErrors.projectName = "Project name is required"
-    } else if (!/^[a-zA-Z0-9-_]+$/.test(formData.projectName)) {
-      newErrors.projectName = "Only letters, numbers, hyphens, and underscores allowed"
+    } else {
+      const projectName = formData.projectName.trim()
+      
+      // Check length (max 100 characters)
+      if (projectName.length > 100) {
+        newErrors.projectName = "Project name must be 100 characters or less"
+      }
+      // Check if lowercase only
+      else if (projectName !== projectName.toLowerCase()) {
+        newErrors.projectName = "Project name must be lowercase only"
+      }
+      // Check for valid characters (letters, digits, dots, underscores, hyphens)
+      else if (!/^[a-z0-9._-]+$/.test(projectName)) {
+        newErrors.projectName = "Only lowercase letters, numbers, dots, underscores, and hyphens allowed"
+      }
+      // Check for triple hyphens (not allowed)
+      else if (projectName.includes('---')) {
+        newErrors.projectName = "Project name cannot contain three consecutive hyphens (---)"
+      }
+      // Check for leading/trailing dots or hyphens
+      else if (projectName.startsWith('.') || projectName.endsWith('.') || 
+               projectName.startsWith('-') || projectName.endsWith('-')) {
+        newErrors.projectName = "Project name cannot start or end with dots or hyphens"
+      }
     }
 
     // Branch validation
@@ -148,6 +170,11 @@ export default function DeploymentForm() {
   }
 
   const handleInputChange = (field: keyof FormData, value: string) => {
+    // Auto-convert project name to lowercase for Vercel compatibility
+    if (field === 'projectName') {
+      value = value.toLowerCase()
+    }
+    
     setFormData((prev) => ({ ...prev, [field]: value }))
     
     // Auto-fill username when repository URL is entered
@@ -196,6 +223,40 @@ export default function DeploymentForm() {
     if (!validateForm()) {
       setSubmitStatus("error")
       setStatusMessage("Please fix the errors above and try again.")
+      
+      // Show validation errors in SweetAlert for better UX
+      const errorMessages = Object.values(errors).filter(Boolean)
+      if (errorMessages.length > 0) {
+        Swal.fire({
+          icon: 'warning',
+          title: 'Validation Error',
+          html: `
+            <div style="text-align: left; color: #ffffff;">
+              <p style="margin-bottom: 15px; font-size: 1.1em;"><strong>Please fix the following issues:</strong></p>
+              <ul style="list-style: none; padding: 0; margin: 0;">
+                ${errorMessages.map(error => `
+                  <li style="margin-bottom: 8px; padding: 8px 12px; background: rgba(239, 68, 68, 0.1); border-radius: 6px; border-left: 3px solid #ef4444; display: flex; align-items: center; gap: 8px;">
+                    <span style="color: #ef4444; font-size: 1.2em;">⚠️</span>
+                    <span style="color: #ffffff;">${error}</span>
+                  </li>
+                `).join('')}
+              </ul>
+              <p style="margin-top: 15px; font-size: 0.9em; color: #17a2b8; font-style: italic;">
+                💡 Tip: Project names must be lowercase and cannot contain three consecutive hyphens (---)
+              </p>
+            </div>
+          `,
+          confirmButtonText: 'Got it!',
+          confirmButtonColor: '#17a2b8',
+          background: '#003D58',
+          color: '#ffffff',
+          customClass: {
+            popup: 'swal-popup-custom',
+            title: 'swal-title-custom',
+            htmlContainer: 'swal-content-custom'
+          }
+        })
+      }
       return
     }
 
@@ -471,8 +532,8 @@ export default function DeploymentForm() {
       </CardHeader>
 
       <CardContent className="px-8 pb-8">
-        {/* Validation Error Summary */}
-        {Object.keys(errors).length > 0 && (
+        {/* Validation Error Summary - Hidden when using SweetAlert */}
+        {Object.keys(errors).length > 0 && submitStatus !== "error" && (
           <Alert className="border-2 border-[#ef4444]/30 bg-[#ef4444]/10 text-[#ef4444] rounded-xl backdrop-blur-sm p-3 mb-4">
             <div className="flex items-center gap-2">
               <AlertCircle className="w-4 h-4 flex-shrink-0" />
@@ -614,7 +675,7 @@ export default function DeploymentForm() {
             <Input
               id="projectName"
               type="text"
-              placeholder="Enter project name"
+              placeholder="my-project-name (lowercase, max 100 chars)"
               value={formData.projectName}
               onChange={(e) => handleInputChange("projectName", e.target.value)}
               className={`border-2 rounded-xl transition-all duration-300 h-11 text-base ${
@@ -624,6 +685,9 @@ export default function DeploymentForm() {
               } text-white placeholder:text-white/40 backdrop-blur-sm hover:shadow-lg hover:shadow-[#17a2b8]/10 focus:shadow-xl focus:shadow-[#17a2b8]/20`}
               disabled={isSubmitting}
             />
+            <p className="text-xs text-white/60 mt-1">
+              💡 Use lowercase letters, numbers, dots, underscores, and hyphens. No spaces or triple hyphens (---).
+            </p>
           </div>
 
           {/* Branch */}
